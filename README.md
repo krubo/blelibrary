@@ -7,7 +7,7 @@ Step 1.AndroidManifest.xml添加权限
 	<uses-permission android:name="android.permission.BLUETOOTH"/>
 	<uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
 	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 	
 # 引用方式
 ## gradle
