@@ -5,6 +5,8 @@
 
 Add it in your root build.gradle at the end of repositories:
 
+Step 1.
+
 	allprojects {
 		repositories {
 			...
@@ -19,12 +21,15 @@ Step 2. Add the dependency
 	}
   
 ## maven
- < repositories >
-		<repository >
-		    < id >jitpack.io< /id >
-		    < url >https://jitpack.io< /url >
-		< /repository >
-	< /repositories >
+
+Step 1.
+
+ 	<repositories>
+		<repository>
+		    <id>jitpack.io</id>
+		    <url>https://jitpack.io</url>
+		</repository>
+	</repositories>
  
 Step 2. Add the dependency
 
