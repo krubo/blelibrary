@@ -26,7 +26,7 @@ Step 1.
 Step 2. Add the dependency
 
 	dependencies {
-	        compile 'com.github.krubo:blelibrary:v1.0'
+	        compile 'com.github.krubo:blelibrary:v1.1'
 	}
   
 ## maven
@@ -45,5 +45,5 @@ Step 2. Add the dependency
 	<dependency>
 	    <groupId>com.github.krubo</groupId>
 	    <artifactId>blelibrary</artifactId>
-	    <version>v1.0</version>
+	    <version>v1.1</version>
 	</dependency>
