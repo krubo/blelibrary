@@ -292,7 +292,7 @@ public class BleSdk {
         return isScanning;
     }
 
-    public void connect(Context context, BluetoothDevice device, boolean autoConnect, ConnectBleCallback callback){
+    public void connect(BluetoothDevice device, boolean autoConnect, ConnectBleCallback callback){
         connectBleCallback = callback;
         checkBle();
         if (!isOpen()){
