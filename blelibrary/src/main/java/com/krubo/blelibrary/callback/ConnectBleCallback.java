@@ -10,4 +10,8 @@ public interface ConnectBleCallback {
     void onConnected();
 
     void onDisconnected();
+
+    void onServicesDiscoveredSuccess();
+
+    void onServicesDiscoveredFail();
 }
