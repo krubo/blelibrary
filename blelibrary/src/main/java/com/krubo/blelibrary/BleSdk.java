@@ -198,15 +198,19 @@ public class BleSdk {
         }
     };
 
-    private BleSdk(Context context){
+    private BleSdk(){
+
+    }
+
+    public void initBleSdk(Context context){
         this.context = context.getApplicationContext();
         BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = bluetoothManager.getAdapter();
     }
 
-    public static BleSdk getInstance(Context context){
+    public static BleSdk getInstance(){
         if (bleSdk == null){
-            bleSdk = new BleSdk(context);
+            bleSdk = new BleSdk();
         }
         return bleSdk;
     }
