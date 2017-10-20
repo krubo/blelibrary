@@ -15,12 +15,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
-import com.krubo.blelibrary.callback.CharacteristicCallback;
+import com.krubo.blelibrary.callback.BleMessageCallback;
 import com.krubo.blelibrary.callback.ConnectBleCallback;
-import com.krubo.blelibrary.callback.DescriptorCallback;
 import com.krubo.blelibrary.callback.ScanBleCallback;
 import com.krubo.blelibrary.utils.LogUtil;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -44,28 +45,119 @@ public class BleSdk {
             }
         }
     };
-    private BluetoothGatt bluetoothGatt;
-    private ConnectBleCallback connectBleCallback;
-    private CharacteristicCallback characteristicCallback;
-    private DescriptorCallback descriptorCallback;
-    private int connectState;
+    private Map<String, BluetoothGatt> bluetoothGattMap = new HashMap<>();
+    private Map<String, ConnectBleCallback> connectBleCallbackMap = new HashMap<>();
+    private Map<String, BleMessageCallback> bleMessageCallbackMap = new HashMap<>();
+    private Map<String, Integer> connectStateMap = new HashMap<>();
     private Handler handler = new Handler(){
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
         }
     };
+
+    private void setBluetoothGatt(BluetoothGatt gatt){
+        if (bluetoothGattMap == null){
+            bluetoothGattMap = new HashMap<>();
+        }
+        if (gatt == null || gatt.getDevice()==null){
+            return;
+        }
+        bluetoothGattMap.put(gatt.getDevice().getAddress(), gatt);
+    }
+
+    public BluetoothGatt getBluetoothGatt(String address){
+        if (bluetoothGattMap == null){
+            bluetoothGattMap = new HashMap<>();
+        }
+        if (address == null || address.length() == 0){
+            return null;
+        }
+        if (bluetoothGattMap.containsKey(address)){
+            return bluetoothGattMap.get(address);
+        }
+        return null;
+    }
+
+    private void setConnectCallback(String address, ConnectBleCallback callback){
+        if (connectBleCallbackMap == null){
+            connectBleCallbackMap = new HashMap<>();
+        }
+        if (callback == null || address == null || address.length() == 0){
+            return;
+        }
+        connectBleCallbackMap.put(address, callback);
+    }
+
+    private ConnectBleCallback getConnectBleCallback(String address){
+        if (connectBleCallbackMap == null){
+            connectBleCallbackMap = new HashMap<>();
+        }
+        if (address == null || address.length() == 0){
+            return null;
+        }
+        if (connectBleCallbackMap.containsKey(address)){
+            return connectBleCallbackMap.get(address);
+        }
+        return null;
+    }
+
+    private void setConnectState(String address, int state){
+        if (connectStateMap == null){
+            connectStateMap = new HashMap<>();
+        }
+        if (address == null || address.length() == 0){
+            return;
+        }
+        connectStateMap.put(address, state);
+    }
+
+    public int getConnectState(String address){
+        if (connectStateMap == null){
+            connectStateMap = new HashMap<>();
+        }
+        if (address == null || address.length() == 0){
+            return -1;
+        }
+        if (connectStateMap.containsKey(address)){
+            return connectStateMap.get(address);
+        }
+        return -1;
+    }
+
+    public void setBleMessageCallback(String address, BleMessageCallback callback){
+        if (bleMessageCallbackMap == null){
+            bleMessageCallbackMap = new HashMap<>();
+        }
+        if (callback == null || address == null || address.length() == 0){
+            return;
+        }
+        bleMessageCallbackMap.put(address, callback);
+    }
+
+    private BleMessageCallback getBleMessageCallback(String address){
+        if (bleMessageCallbackMap == null){
+            bleMessageCallbackMap = new HashMap<>();
+        }
+        if (address == null || address.length() == 0){
+            return null;
+        }
+        if (bleMessageCallbackMap.containsKey(address)){
+            return bleMessageCallbackMap.get(address);
+        }
+        return null;
+    }
+
     private BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             super.onConnectionStateChange(gatt, status, newState);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onConnectionStateChange status :"+status+" newState :"+newState);
-            connectState = newState;
+            String address = gatt.getDevice().getAddress();
+            final ConnectBleCallback connectBleCallback = getConnectBleCallback(address);
+            LogUtil.d("onConnectionStateChange status :"+status+" newState :"+newState+" address : "+ address);
+            setConnectState(address, newState);
             if (newState == BluetoothProfile.STATE_CONNECTED){
-                bluetoothGatt.discoverServices();
+                gatt.discoverServices();
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
@@ -75,7 +167,7 @@ public class BleSdk {
                     }
                 });
             }else if(newState == BluetoothProfile.STATE_DISCONNECTED){
-                close();
+                close(address);
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
@@ -90,10 +182,9 @@ public class BleSdk {
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, final int status) {
             super.onServicesDiscovered(gatt, status);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onServicesDiscovered status :"+status);
+            String address = gatt.getDevice().getAddress();
+            LogUtil.d("onServicesDiscovered status :"+status+" address : "+ address);
+            final ConnectBleCallback connectBleCallback = getConnectBleCallback(address);
             if (connectBleCallback != null){
                 runOnMainThread(new Runnable() {
                     @Override
@@ -111,16 +202,14 @@ public class BleSdk {
         @Override
         public void onCharacteristicRead(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic, final int status) {
             super.onCharacteristicRead(gatt, characteristic, status);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onCharacteristicRead status :"+status);
-            if (characteristicCallback != null){
+            String address = gatt.getDevice().getAddress();
+            final BleMessageCallback bleMessageCallback = getBleMessageCallback(address);
+            LogUtil.d("onCharacteristicRead status :"+status+" address : "+ address);
+            if (bleMessageCallback != null){
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
-                        characteristicCallback.readResult(characteristic, status == BluetoothGatt.GATT_SUCCESS);
-                        characteristicCallback = null;
+                        bleMessageCallback.readCharacteristicResult(characteristic, status == BluetoothGatt.GATT_SUCCESS);
                     }
                 });
             }
@@ -129,16 +218,14 @@ public class BleSdk {
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, final BluetoothGattCharacteristic characteristic, final int status) {
             super.onCharacteristicWrite(gatt, characteristic, status);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onCharacteristicWrite status :"+status);
-            if (characteristicCallback != null){
+            String address = gatt.getDevice().getAddress();
+            final BleMessageCallback bleMessageCallback = getBleMessageCallback(address);
+            LogUtil.d("onCharacteristicWrite status :"+status+" address : "+ address);
+            if (bleMessageCallback != null){
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
-                        characteristicCallback.writeResult(characteristic, status == BluetoothGatt.GATT_SUCCESS);
-                        characteristicCallback = null;
+                        bleMessageCallback.writeCharacteristicResult(characteristic, status == BluetoothGatt.GATT_SUCCESS);
                     }
                 });
             }
@@ -147,25 +234,21 @@ public class BleSdk {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicChanged(gatt, characteristic);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onCharacteristicChanged");
+            String address = gatt.getDevice().getAddress();
+            LogUtil.d("onCharacteristicChanged"+" address : "+ address);
         }
 
         @Override
         public void onDescriptorRead(BluetoothGatt gatt, final BluetoothGattDescriptor descriptor, final int status) {
             super.onDescriptorRead(gatt, descriptor, status);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onDescriptorRead status :" + status);
-            if (descriptorCallback != null){
+            String address = gatt.getDevice().getAddress();
+            final BleMessageCallback bleMessageCallback = getBleMessageCallback(address);
+            LogUtil.d("onDescriptorRead status :" + status+" address : "+ address);
+            if (bleMessageCallback != null){
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
-                        descriptorCallback.readResult(descriptor, status == BluetoothGatt.GATT_SUCCESS);
-                        descriptorCallback = null;
+                        bleMessageCallback.readDescriptorResult(descriptor, status == BluetoothGatt.GATT_SUCCESS);
                     }
                 });
             }
@@ -174,21 +257,19 @@ public class BleSdk {
         @Override
         public void onDescriptorWrite(BluetoothGatt gatt, final BluetoothGattDescriptor descriptor, final int status) {
             super.onDescriptorWrite(gatt, descriptor, status);
-            if (!gatt.getDevice().getAddress().equals(bluetoothGatt.getDevice().getAddress())){
-                return;
-            }
-            LogUtil.d("onDescriptorWrite status :" + status);
-            if (descriptorCallback != null){
+            String address = gatt.getDevice().getAddress();
+            final BleMessageCallback bleMessageCallback = getBleMessageCallback(address);
+            LogUtil.d("onDescriptorWrite status :" + status+" address : "+ address);
+            if (bleMessageCallback != null){
                 runOnMainThread(new Runnable() {
                     @Override
                     public void run() {
-                        descriptorCallback.writeResult(descriptor, status == BluetoothGatt.GATT_SUCCESS);
-                        descriptorCallback = null;
+                        bleMessageCallback.writeDescriptorResult(descriptor, status == BluetoothGatt.GATT_SUCCESS);
                     }
                 });
             }
         }
-
+//
         private void runOnMainThread(Runnable runnable){
             if (Looper.myLooper() == Looper.getMainLooper()){
                 runnable.run();
@@ -202,7 +283,7 @@ public class BleSdk {
 
     }
 
-    public void initBleSdk(Context context){
+    public void init(Context context){
         this.context = context.getApplicationContext();
         BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = bluetoothManager.getAdapter();
@@ -297,180 +378,187 @@ public class BleSdk {
     }
 
     public void connect(BluetoothDevice device, boolean autoConnect, ConnectBleCallback callback){
-        connectBleCallback = callback;
+        if (device==null){
+            return;
+        }
+        String address = device.getAddress();
+        setConnectCallback(address, callback);
         checkBle();
         if (!isOpen()){
-            if (connectBleCallback != null) {
+            if (callback != null) {
                 callback.onDisconnected();
             }
             return;
         }
-        if (connectState == BluetoothProfile.STATE_DISCONNECTED){
-            connectState = BluetoothProfile.STATE_CONNECTING;
-            bluetoothGatt = device.connectGatt(context, autoConnect, gattCallback);
+        if (getConnectState(address) == BluetoothProfile.STATE_DISCONNECTED){
+            setConnectState(address, BluetoothProfile.STATE_CONNECTING);
+            setBluetoothGatt(device.connectGatt(context, autoConnect, gattCallback));
         }
     }
 
-    public void disconnect(){
+    public void disconnect(String address){
+        if (address == null || address.length() == 0){
+            return;
+        }
         checkBle();
         if (!isOpen()){
             return;
         }
-        if (connectState == BluetoothProfile.STATE_CONNECTED){
+        BluetoothGatt bluetoothGatt = bluetoothGattMap.get(address);
+        if (getConnectState(address) == BluetoothProfile.STATE_CONNECTED){
             if (bluetoothGatt != null) {
-                connectState = BluetoothProfile.STATE_DISCONNECTING;
+                setConnectState(address, BluetoothProfile.STATE_DISCONNECTING);
                 bluetoothGatt.disconnect();
             }else{
-                connectState = BluetoothProfile.STATE_DISCONNECTED;
+                setConnectState(address, BluetoothProfile.STATE_DISCONNECTED);
             }
-        }else if(connectState == BluetoothProfile.STATE_CONNECTING){
-            close();
+        }else if(getConnectState(address) == BluetoothProfile.STATE_CONNECTING){
+            close(address);
         }
     }
 
-    public void close(){
+    public void close(String address){
+        if (address == null || address.length() == 0){
+            return;
+        }
         checkBle();
         if (!isOpen()){
             return;
         }
-        connectState = BluetoothProfile.STATE_DISCONNECTED;
+        setConnectState(address, BluetoothProfile.STATE_DISCONNECTED);
+        BluetoothGatt bluetoothGatt = bluetoothGattMap.get(address);
         if (bluetoothGatt != null) {
             bluetoothGatt.close();
-            bluetoothGatt = null;
         }
-        connectBleCallback = null;
     }
 
-    public boolean isConnected(){
-        return connectState == BluetoothProfile.STATE_CONNECTED;
+    public boolean isConnected(String address){
+        if (address == null || address.length() == 0){
+            return false;
+        }
+        return getConnectState(address) == BluetoothProfile.STATE_CONNECTED;
     }
 
-    private void setFailCallback(boolean isCharacteristic, boolean isRead){
+    private void setFailCallback(String address, boolean isCharacteristic, boolean isRead){
+        BleMessageCallback bleMessageCallback = getBleMessageCallback(address);
+        if (bleMessageCallback == null) {
+            return;
+        }
         if (isCharacteristic) {
-            if (characteristicCallback != null) {
-                if (isRead){
-                    characteristicCallback.readResult(null, true);
-                }else{
-                    characteristicCallback.writeResult(null, false);
-                }
-                characteristicCallback = null;
+            if (isRead){
+                bleMessageCallback.readCharacteristicResult(null, true);
+            }else{
+                bleMessageCallback.writeCharacteristicResult(null, false);
             }
         }else{
-            if (descriptorCallback != null){
-                if (isRead){
-                    descriptorCallback.readResult(null, false);
-                }else{
-                    descriptorCallback.writeResult(null, false);
-                }
-                descriptorCallback = null;
+            if (isRead){
+                bleMessageCallback.readDescriptorResult(null, false);
+            }else{
+                bleMessageCallback.writeDescriptorResult(null, false);
             }
         }
     }
 
-    private BluetoothGattCharacteristic initCharacteristic(UUID serviceUuid, UUID characteristicUuid,
+    private BluetoothGattCharacteristic initCharacteristic(String address, UUID serviceUuid, UUID characteristicUuid,
                                                            boolean isCharacteristic, boolean isRead){
-        BluetoothGattService service = bluetoothGatt.getService(serviceUuid);
+        BluetoothGattService service = getBluetoothGatt(address).getService(serviceUuid);
         if (service == null){
-            setFailCallback(isCharacteristic, isRead);
+            setFailCallback(address, isCharacteristic, isRead);
             return null;
         }
         BluetoothGattCharacteristic characteristic = service.getCharacteristic(characteristicUuid);
         if (characteristic == null){
-            setFailCallback(isCharacteristic, isRead);
+            setFailCallback(address, isCharacteristic, isRead);
         }
         return characteristic;
     }
 
-    private BluetoothGattDescriptor initDescriptor(UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid,
+    private BluetoothGattDescriptor initDescriptor(String address, UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid,
                                                    boolean isCharacteristic, boolean isRead){
-        BluetoothGattService service = bluetoothGatt.getService(serviceUuid);
+        BluetoothGattService service = getBluetoothGatt(address).getService(serviceUuid);
         if (service == null){
-            setFailCallback(isCharacteristic, isRead);
+            setFailCallback(address, isCharacteristic, isRead);
             return null;
         }
-        BluetoothGattCharacteristic characteristic = initCharacteristic(serviceUuid, characteristicUuid,
+        BluetoothGattCharacteristic characteristic = initCharacteristic(address, serviceUuid, characteristicUuid,
                 isCharacteristic, isRead);
         if (characteristic == null){
             return null;
         }
         BluetoothGattDescriptor descriptor = characteristic.getDescriptor(descriptorUuid);
         if (descriptor == null){
-            setFailCallback(isCharacteristic, isRead);
+            setFailCallback(address, isCharacteristic, isRead);
         }
         return descriptor;
     }
 
-    public boolean writeCharacteristic(UUID serviceUuid, UUID characteristicUuid, byte[] data, CharacteristicCallback callback){
-        characteristicCallback = callback;
+    public boolean writeCharacteristic(String address, UUID serviceUuid, UUID characteristicUuid, byte[] data){
         checkBle();
         if (!isOpen()){
-            setFailCallback(true, false);
+            setFailCallback(address, true, false);
             return false;
         }
-        if (bluetoothGatt == null || data == null || serviceUuid == null || characteristicUuid == null){
-            setFailCallback(true, false);
+        if (getBluetoothGatt(address) == null || data == null || serviceUuid == null || characteristicUuid == null){
+            setFailCallback(address, true, false);
             return false;
         }
-        BluetoothGattCharacteristic characteristic = initCharacteristic(serviceUuid, characteristicUuid, true, false);
+        BluetoothGattCharacteristic characteristic = initCharacteristic(address, serviceUuid, characteristicUuid, true, false);
         if (characteristic == null){
             return false;
         }
         characteristic.setValue(data);
-        return bluetoothGatt.writeCharacteristic(characteristic);
+        return getBluetoothGatt(address).writeCharacteristic(characteristic);
     }
 
-    public boolean readCharacteristic(UUID serviceUuid, UUID characteristicUuid, CharacteristicCallback callback){
-        characteristicCallback = callback;
+    public boolean readCharacteristic(String address, UUID serviceUuid, UUID characteristicUuid){
         checkBle();
         if (!isOpen()){
-            setFailCallback(true, true);
+            setFailCallback(address, true, true);
             return false;
         }
-        if (bluetoothGatt == null || serviceUuid == null || characteristicUuid == null){
-            setFailCallback(true, true);
+        if (getBluetoothGatt(address) == null || serviceUuid == null || characteristicUuid == null){
+            setFailCallback(address, true, true);
             return false;
         }
-        BluetoothGattCharacteristic characteristic = initCharacteristic(serviceUuid, characteristicUuid, true, true);
+        BluetoothGattCharacteristic characteristic = initCharacteristic(address, serviceUuid, characteristicUuid, true, true);
         if (characteristic == null){
             return false;
         }
-        return bluetoothGatt.readCharacteristic(characteristic);
+        return getBluetoothGatt(address).readCharacteristic(characteristic);
     }
 
-    public boolean writeDescriptor(UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid, byte[] data, DescriptorCallback callback){
-        descriptorCallback = callback;
+    public boolean writeDescriptor(String address, UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid, byte[] data){
         checkBle();
         if (!isOpen()){
-            setFailCallback(false, false);
+            setFailCallback(address, false, false);
             return false;
         }
-        if (bluetoothGatt == null || data == null || serviceUuid == null || characteristicUuid == null || descriptorUuid == null){
-            setFailCallback(false, false);
+        if (getBluetoothGatt(address) == null || data == null || serviceUuid == null || characteristicUuid == null || descriptorUuid == null){
+            setFailCallback(address, false, false);
             return false;
         }
-        BluetoothGattDescriptor descriptor = initDescriptor(serviceUuid, characteristicUuid, descriptorUuid, false, false);
+        BluetoothGattDescriptor descriptor = initDescriptor(address, serviceUuid, characteristicUuid, descriptorUuid, false, false);
         if (descriptor == null){
             return false;
         }
         descriptor.setValue(data);
-        return bluetoothGatt.writeDescriptor(descriptor);
+        return getBluetoothGatt(address).writeDescriptor(descriptor);
     }
 
-    public boolean readDescriptor(UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid, DescriptorCallback callback){
-        descriptorCallback = callback;
+    public boolean readDescriptor(String address, UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid){
         checkBle();
         if (!isOpen()){
-            setFailCallback(false, true);
+            setFailCallback(address, false, true);
             return false;
         }
-        if (bluetoothGatt == null || serviceUuid == null || characteristicUuid == null || descriptorUuid == null){
-            setFailCallback(false, true);
+        if (getBluetoothGatt(address) == null || serviceUuid == null || characteristicUuid == null || descriptorUuid == null){
+            setFailCallback(address, false, true);
             return false;
         }
-        BluetoothGattDescriptor descriptor = initDescriptor(serviceUuid, characteristicUuid, descriptorUuid, false, true);
+        BluetoothGattDescriptor descriptor = initDescriptor(address, serviceUuid, characteristicUuid, descriptorUuid, false, true);
         if (descriptor == null){
             return false;
         }
-        return bluetoothGatt.readDescriptor(descriptor);
+        return getBluetoothGatt(address).readDescriptor(descriptor);
     }
 }
